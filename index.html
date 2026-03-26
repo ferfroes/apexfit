@@ -1223,13 +1223,21 @@ function calcMarcos(p) {
   const diffTotal = Math.abs(pesoAlvo - p.peso);
   const seta = isE ? '↓' : isH ? '↑' : '→';
 
-  // Progressão acumulada — percentuais sem caps artificiais
-  // (baseados nos ritmos clínicos reais: ~0.5–1kg/sem déficit)
-  const pct30 = 0.18, pct90 = 0.42, pct120 = 0.58, pct365 = 1.0;
+  // Ritmos máximos clinicamente seguros por semana
+  // Emagrecimento: máx 0.75kg/sem (preserva músculo)
+  // Hipertrofia:   máx 0.25kg/sem (ganho real de massa)
+  const ritmoMaxSem = isE ? 0.75 : isH ? 0.25 : 0.3;
 
-  const delta30  = diffTotal * pct30;
-  const delta90  = diffTotal * pct90;
-  const delta120 = diffTotal * pct120;
+  // Caps absolutos por período (semanas × ritmo máx)
+  const capKg30  = isE ? 3.0  : isH ? 1.0  : 1.5;  // 4 semanas
+  const capKg90  = isE ? 8.0  : isH ? 2.5  : 3.5;  // 12 semanas
+  const capKg120 = isE ? 10.0 : isH ? 3.2  : 4.5;  // 16 semanas
+  // 1 ano sem cap — é o alvo real
+
+  // Progressão acumulada com cap aplicado
+  const delta30  = Math.min(diffTotal * 0.18, capKg30);
+  const delta90  = Math.min(diffTotal * 0.42, capKg90);
+  const delta120 = Math.min(diffTotal * 0.58, capKg120);
   const delta365 = diffTotal;
 
   const sign = isE ? -1 : isH ? 1 : 0;
@@ -1239,20 +1247,22 @@ function calcMarcos(p) {
   const peso120 = (p.peso + sign * delta120).toFixed(1);
   const peso365 = pesoAlvo;
 
-  // Ritmos semanais por fase
+  // Ritmos reais por fase (acumulado ÷ semanas)
   const ritmo30      = (delta30 / 4.3).toFixed(2);
   const ritmo90_60   = ((delta90  - delta30)  / 8.6).toFixed(2);
   const ritmo120_90  = ((delta120 - delta90)  / 4.3).toFixed(2);
   const ritmo365_120 = ((delta365 - delta120) / 34.8).toFixed(2);
 
+  // % do objetivo concluído em cada marco (baseado no delta real, não no percentual fixo)
+  const pct30  = Math.round(delta30  / diffTotal * 100);
+  const pct90  = Math.round(delta90  / diffTotal * 100);
+  const pct120 = Math.round(delta120 / diffTotal * 100);
+
   return {
     isE, isH, pesoAlvo, diffTotal, seta,
     delta30, delta90, delta120, delta365,
     peso30, peso90, peso120, peso365,
-    pct30: Math.round(pct30*100),
-    pct90: Math.round(pct90*100),
-    pct120: Math.round(pct120*100),
-    pct365: 100,
+    pct30, pct90, pct120, pct365: 100,
     ritmo30, ritmo90_60, ritmo120_90, ritmo365_120,
   };
 }
