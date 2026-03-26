@@ -1073,6 +1073,8 @@ function initTheme() {
 // STATE & STORAGE
 // ══════════════════════════════════════════════
 const KEY = 'apexfit_v2';
+// URL da Vercel Function — proxy para API Anthropic (resolve CORS)
+const VERCEL_API = 'https://apexfit-api-vercel.vercel.app/api/plano';
 let S = {
   perfil: {},
   checkins: [],
@@ -1286,24 +1288,10 @@ async function gerarPlano() {
   const cal  = calMeta(tdee, p.objetivo);
   const M    = calcMarcos(p);
 
-  if (S.apiKey) {
-    // ── DETECÇÃO DE AMBIENTE ──────────────────
-    // claude.ai bloqueia chamadas externas por política de segurança iframe.
-    // A geração IA só funciona quando hospedado externamente (GitHub Pages).
-    const hostAtual = window.location.hostname || '';
-    const emIframe  = (() => { try { return window.self !== window.top; } catch(e) { return true; } })();
-    const isBloqueado = emIframe || hostAtual === '' ||
-                        hostAtual.includes('claude.ai') ||
-                        hostAtual.includes('anthropic.com');
-
-    if (isBloqueado) {
-      ab.innerHTML = `<div class="alert warn">
-        ⚠ <strong>Ambiente detectado: claude.ai</strong> — chamadas à API são bloqueadas por segurança aqui.<br>
-        Hospede o arquivo no <strong>GitHub Pages</strong> para ativar geração de plano por IA.
-        Gerando plano padrão agora.
-      </div>`;
-      // cai direto no fallback estático abaixo
-    } else {
+  {
+    // ── CAMINHO IA via Vercel Proxy ──────────
+    // A API Key fica no servidor Vercel — sem CORS, sem exposição de chave
+    {
       // ── CAMINHO IA (GitHub Pages / local) ────
       const steps = [
         'Analisando perfil...',
@@ -1347,8 +1335,6 @@ async function gerarPlano() {
         ab.innerHTML = `<div class="alert warn">${msg}</div>`;
       }
     }
-  } else {
-    ab.innerHTML = `<div class="alert warn">💡 Configure a API Key (aba ⚙ Config) para planos 100% personalizados por IA quando hospedado no GitHub Pages.</div>`;
   }
 
   // ── FALLBACK ESTÁTICO ─────────────────────
@@ -1413,15 +1399,10 @@ JSON a retornar:
 }`;
 
   // Timeout via Promise.race — sem AbortController (incompatível com iframe)
-  const fetchPromise = fetch('https://api.anthropic.com/v1/messages', {
+  const fetchPromise = fetch(VERCEL_API, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': S.apiKey,
-      'anthropic-version': '2023-06-01'
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
       max_tokens: 6000,
       system: 'Personal trainer e nutricionista especializado. Responda SOMENTE com JSON válido, sem markdown, sem texto fora do JSON.',
       messages: [{ role: 'user', content: userPrompt }]
@@ -2872,10 +2853,10 @@ async function analisarFotos() {
     text: "Você é um profissional de educação física e nutrição. Analise estas fotos corporais de " + (p.nome||"usuário") + " (" + (p.sexo==="M"?"masculino":"feminino") + ", " + p.idade + " anos, " + p.peso + "kg, " + p.altura + "cm, objetivo: " + (p.objetivo||"não informado") + ", período de treino: " + periodoLabel + ").\n\nForneça análise objetiva e respeitosa em português, estruturada:\n1. COMPOSIÇÃO APARENTE — estimativa visual de gordura e massa muscular\n2. POSTURA E ALINHAMENTO — desequilíbrios posturais visíveis\n3. GRUPOS MUSCULARES LAGGING — grupos menos desenvolvidos para priorizar\n4. OBSERVAÇÕES PARA O PLANO — 2-3 recomendações específicas\n\nSeja direto, técnico e construtivo. Máximo 250 palavras."
   };
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch(VERCEL_API, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": S.apiKey, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 600, messages: [{ role: "user", content: [...imagens, promptTexto] }] })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ max_tokens: 600, messages: [{ role: "user", content: [...imagens, promptTexto] }] })
     });
     const data = await res.json();
     const analise = data.content?.[0]?.text || "Não foi possível analisar as fotos.";
@@ -2970,10 +2951,10 @@ DADOS DO USUÁRIO:
 ${buildContext()}`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(VERCEL_API, {
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':S.apiKey,'anthropic-version':'2023-06-01'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:systemPrompt,messages:[{role:'user',content:userMsg}]})
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({max_tokens:1000,system:systemPrompt,messages:[{role:'user',content:userMsg}]})
     });
     const data = await res.json();
     const reply = data.content?.[0]?.text || 'Erro ao processar resposta.';
@@ -3019,10 +3000,10 @@ async function testarKey() {
   spin.style.display='block'; txt.style.display='none';
   const status = document.getElementById('cfg-status');
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(VERCEL_API, {
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:10,messages:[{role:'user',content:'ping'}]})
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({max_tokens:10,messages:[{role:'user',content:'ping'}]})
     });
     if (res.ok) { status.textContent='✓ Conexão OK — API Key válida.'; status.style.color='var(--green)'; }
     else { status.textContent='✗ API Key inválida ou sem créditos.'; status.style.color='var(--pink)'; }
